@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Tool - Dashboard Containers</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            line-height: 1.5;
+            margin: 20px;
+        }
+        h1 {
+            margin-bottom: 20px;
+        }
+        .debug-btn {
+            background: #0066ff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 20px;
+        }
+        .debug-btn:hover {
+            background: #0055dd;
+        }
+        pre {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+        .result {
+            margin-top: 20px;
+        }
+        .container-item {
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .container-item.found {
+            border-color: #10B981;
+            background-color: #ECFDF5;
+        }
+        .container-item.not-found {
+            border-color: #EF4444;
+            background-color: #FEF2F2;
+        }
+    </style>
+</head>
+<body>
+    <h1>Debug Tool - Dashboard Containers</h1>
+    
+    <button id="checkContainers" class="debug-btn">Konteyner Durumunu Kontrol Et</button>
+    <button id="createContainer" class="debug-btn">Gelişmiş Analitik Konteynerini Oluştur</button>
+    
+    <div class="result" id="resultArea">
+        <p>Sonuçlar burada görüntülenecek...</p>
+    </div>
+    
+    <script>
+        document.getElementById('checkContainers').addEventListener('click', function() {
+            const containersToCheck = [
+                'executiveSummaryContainer',
+                'operationalDashboardContainer',
+                'advancedAnalyticsDashboardContainer'
+            ];
+            
+            const resultArea = document.getElementById('resultArea');
+            resultArea.innerHTML = '<h2>Dashboard Konteynerleri</h2>';
+            
+            containersToCheck.forEach(containerId => {
+                const container = document.createElement('div');
+                const element = window.opener.document.getElementById(containerId);
+                
+                if (element) {
+                    container.className = 'container-item found';
+                    container.innerHTML = `
+                        <strong>${containerId}</strong>: BULUNDU
+                        <p>Görünürlük: ${getComputedStyle(element).display !== 'none' ? 'Görünür' : 'Gizli'}</p>
+                        <p>İçerik uzunluğu: ${element.innerHTML.length} karakter</p>
+                        <p>Üst eleman: ${element.parentElement ? element.parentElement.id || element.parentElement.tagName : 'Yok'}</p>
+                    `;
+                } else {
+                    container.className = 'container-item not-found';
+                    container.innerHTML = `<strong>${containerId}</strong>: BULUNAMADI`;
+                }
+                
+                resultArea.appendChild(container);
+            });
+            
+            // Check for advancedAnalyticsDashboard object
+            const objectCheck = document.createElement('div');
+            if (window.opener.advancedAnalyticsDashboard) {
+                objectCheck.className = 'container-item found';
+                objectCheck.innerHTML = `
+                    <strong>advancedAnalyticsDashboard nesnesi</strong>: BULUNDU
+                    <p>isInitialized: ${window.opener.advancedAnalyticsDashboard.isInitialized}</p>
+                    <p>Metotlar: ${Object.getOwnPropertyNames(Object.getPrototypeOf(window.opener.advancedAnalyticsDashboard)).join(', ')}</p>
+                `;
+            } else {
+                objectCheck.className = 'container-item not-found';
+                objectCheck.innerHTML = `<strong>advancedAnalyticsDashboard nesnesi</strong>: BULUNAMADI`;
+            }
+            resultArea.appendChild(objectCheck);
+            
+            // Console logs
+            const consoleCheck = document.createElement('div');
+            consoleCheck.innerHTML = '<h3>Konsol mesajlarını kontrol edin</h3>';
+            resultArea.appendChild(consoleCheck);
+            
+            console.log('window.app:', window.opener.app);
+            console.log('window.advancedAnalyticsDashboard:', window.opener.advancedAnalyticsDashboard);
+        });
+        
+        document.getElementById('createContainer').addEventListener('click', function() {
+            const dashboardContent = window.opener.document.getElementById('dashboardContent');
+            
+            if (dashboardContent) {
+                // Check if container already exists
+                let container = window.opener.document.getElementById('advancedAnalyticsDashboardContainer');
+                
+                if (!container) {
+                    // Create container
+                    container = window.opener.document.createElement('div');
+                    container.id = 'advancedAnalyticsDashboardContainer';
+                    container.className = 'advanced-analytics-dashboard mb-8';
+                    
+                    // Find where to insert the container
+                    const operationalDashboard = window.opener.document.getElementById('operationalDashboardContainer');
+                    if (operationalDashboard) {
+                        operationalDashboard.after(container);
+                    } else {
+                        // Insert at the end of dashboardContent
+                        dashboardContent.appendChild(container);
+                    }
+                    
+                    container.innerHTML = `
+                        <div class="mb-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-lg font-medium text-gray-900">Gelişmiş Analitik Dashboard</h3>
+                                <button id="refreshAdvancedAnalytics" class="btn btn-secondary text-sm">
+                                    <i data-lucide="refresh-cw" style="width: 0.875rem; height: 0.875rem;"></i>
+                                    <span>Yenile</span>
+                                </button>
+                            </div>
+                            <div class="chart-card">
+                                <div class="chart-header">
+                                    <h3 class="chart-title">Manuel olarak oluşturuldu</h3>
+                                </div>
+                                <div class="p-4">
+                                    <p>Bu konteyner debug aracı tarafından manuel olarak oluşturulmuştur.</p>
+                                    <p>Lütfen sayfayı yenileyip advancedAnalyticsDashboard bileşeninin doğru yüklenip yüklenmediğini kontrol edin.</p>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    alert('Gelişmiş Analitik Dashboard konteyneri oluşturuldu!');
+                } else {
+                    alert('Konteyner zaten mevcut!');
+                }
+            } else {
+                alert('Dashboard içeriği bulunamadı!');
+            }
+        });
+    </script>
+</body>
+</html>

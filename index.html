@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bütçe Takibi | Kişisel Finans Yöneticisi</title>
+    
+    <!-- Tailwind CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    
+    <!-- Tabulator.js -->
+    <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator_modern.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+    
+    <!-- XLSX (SheetJS) for Excel exports -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    
+    <!-- Custom CSS Files -->
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="css/categories.css">
+    <link rel="stylesheet" href="css/table.css">
+    <link rel="stylesheet" href="css/reports.css">
+    
+    <!-- LocalStorage Monitor Script -->
+    <script>
+        // Veri güncelleme sorunlarını izlemek için localStorage API'sini wrap et
+        (function() {
+            console.log('LocalStorage monitor script başlatılıyor...');
+            
+            // Orijinal metodları sakla
+            const originalSetItem = localStorage.setItem;
+            const originalGetItem = localStorage.getItem;
+            
+            // localStorage.setItem metodunu wrap et
+            localStorage.setItem = function(key, value) {
+                if (key === 'budgetTracker') {
+                    console.log('📝 localStorage.setItem çağrıldı - budgetTracker');
+                    console.log('  Veri boyutu:', value.length, 'karakter');
+                    
+                    // Kaynak fonksiyonu bul
+                    console.log('  Çağrı kaynağı:');
+                    const err = new Error();
+                    console.log(err.stack);
+                }
+                
+                // Orijinal metodu çağır
+                originalSetItem.call(localStorage, key, value);
+                
+                // Doğrulama
+                if (key === 'budgetTracker') {
+                    const savedData = localStorage.getItem(key);
+                    if (savedData === value) {
+                        console.log('  ✅ Veri doğrulandı: başarıyla kaydedildi');
+                    } else {
+                        console.error('  ❌ Veri doğrulama hatası!');
+                        console.log('  Kaydedilen:', savedData ? savedData.substring(0, 100) + '...' : 'null');
+                        console.log('  Beklenen:', value ? value.substring(0, 100) + '...' : 'null');
+                    }
+                }
+            };
+            
+            // localStorage.getItem metodunu wrap et
+            localStorage.getItem = function(key) {
+                const value = originalGetItem.call(localStorage, key);
+                
+                if (key === 'budgetTracker') {
+                    console.log('🔍 localStorage.getItem çağrıldı - budgetTracker');
+                    console.log('  Veri boyutu:', value ? value.length : 0, 'karakter');
+                    console.log('  Veri durumu:', value ? 'Mevcut' : 'Bulunamadı');
+                }
+                
+                return value;
+            };
+            
+            console.log('LocalStorage monitor script hazır.');
+        })();
+    </script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <header class="bg-white shadow-sm" style="border-bottom: 1px solid #E5E7EB;">
+        <div class="container">
+            <div class="flex justify-between items-center" style="height: 4rem;">
+                <div class="flex items-center space-x-3">
+                    <div class="bg-primary" style="padding: 0.5rem; border-radius: 0.5rem;">
+                        <i data-lucide="wallet" style="width: 1.5rem; height: 1.5rem; color: white;"></i>
+                    </div>
+                    <h1 style="font-size: 1.25rem; font-weight: 700; color: var(--gray-900); margin: 0;">Bütçe Takibi</h1>
+                </div>
+                
+                <div class="flex items-center space-x-4">
+                    <!-- Export/Import Buttons -->
+                    <button id="exportBtn" class="btn btn-secondary">
+                        <i data-lucide="download" style="width: 1rem; height: 1rem;"></i>
+                        <span>Dışa Aktar</span>
+                    </button>
+                    <button id="importBtn" class="btn btn-success">
+                        <i data-lucide="upload" style="width: 1rem; height: 1rem;"></i>
+                        <span>İçe Aktar</span>
+                    </button>
+                    <button id="clearTransactionsBtn" class="btn btn-error">
+                        <i data-lucide="trash-2" style="width: 1rem; height: 1rem;"></i>
+                        <span>Tüm İşlemleri Temizle</span>
+                    </button>
+                    <input type="file" id="importFile" accept=".json" class="hidden">
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="container" style="margin-top: 2rem;">
+        <div class="nav-tabs">
+            <button id="dashboardTab" class="nav-tab active">
+                <i data-lucide="bar-chart-3" style="width: 1rem; height: 1rem;"></i>
+                <span>Dashboard</span>
+            </button>
+            <button id="categoriesTab" class="nav-tab">
+                <i data-lucide="folder" style="width: 1rem; height: 1rem;"></i>
+                <span>Kategoriler</span>
+            </button>
+            <button id="transactionsTab" class="nav-tab">
+                <i data-lucide="table" style="width: 1rem; height: 1rem;"></i>
+                <span>İşlemler</span>
+            </button>
+            <button id="reportsTab" class="nav-tab">
+                <i data-lucide="chart-line" style="width: 1rem; height: 1rem;"></i>
+                <span>Raporlar</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container" style="padding: 2rem 0;">
+        
+        <!-- Dashboard Tab Content -->
+        <div id="dashboardContent" class="tab-content">
+            <!-- Dashboard Controls -->
+            <div class="dashboard-controls mb-6 flex justify-between items-center">
+                <div class="date-filters">
+                    <select id="dashboardPeriod" class="p-2 border border-gray-300 rounded-lg text-sm">
+                        <option value="thisMonth">Bu Ay</option>
+                        <option value="lastMonth">Geçen Ay</option>
+                        <option value="thisYear">Bu Yıl</option>
+                        <option value="allTime">Tüm Zamanlar</option>
+                    </select>
+                </div>
+                <div class="dashboard-actions">
+                    <button id="refreshDashboard" class="btn btn-secondary text-sm">
+                        <i data-lucide="refresh-cw" style="width: 0.875rem; height: 0.875rem;"></i>
+                        <span>Yenile</span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Summary Cards -->
+            <div class="stats-grid">
+                <div class="stat-card income" data-type="totalIncome">
+                    <div class="stat-content">
+                        <div class="stat-info">
+                            <p class="stat-label">Toplam Gelir</p>
+                            <p id="totalIncome" class="stat-value positive">₺0</p>
+                            <div class="stat-trend" id="incomeTrend">
+                                <!-- Trend will be added dynamically -->
+                            </div>
+                        </div>
+                        <div class="stat-icon income">
+                            <i data-lucide="trending-up" style="width: 1.5rem; height: 1.5rem;"></i>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="stat-card expense" data-type="totalExpense">
+                    <div class="stat-content">
+                        <div class="stat-info">
+                            <p class="stat-label">Toplam Gider</p>
+                            <p id="totalExpense" class="stat-value negative">₺0</p>
+                            <div class="stat-trend" id="expenseTrend">
+                                <!-- Trend will be added dynamically -->
+                            </div>
+                        </div>
+                        <div class="stat-icon expense">
+                            <i data-lucide="trending-down" style="width: 1.5rem; height: 1.5rem;"></i>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="stat-card balance" data-type="netBalance">
+                    <div class="stat-content">
+                        <div class="stat-info">
+                            <p class="stat-label">Net Bakiye</p>
+                            <p id="netBalance" class="stat-value neutral">₺0</p>
+                            <div class="stat-trend" id="balanceTrend">
+                                <!-- Trend will be added dynamically -->
+                            </div>
+                        </div>
+                        <div class="stat-icon balance">
+                            <i data-lucide="wallet" style="width: 1.5rem; height: 1.5rem;"></i>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="stat-card monthly" data-type="monthlyBalance">
+                    <div class="stat-content">
+                        <div class="stat-info">
+                            <p class="stat-label">Bu Ay</p>
+                            <p id="monthlyBalance" class="stat-value neutral">₺0</p>
+                            <div class="stat-trend" id="monthlyTrend">
+                                <!-- Trend will be added dynamically -->
+                            </div>
+                        </div>
+                        <div class="stat-icon monthly">
+                            <i data-lucide="calendar" style="width: 1.5rem; height: 1.5rem;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Advanced KPI Cards -->
+            <div class="mb-8 mt-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Mali Sağlık Göstergeleri</h3>
+                <div class="stats-grid" id="advancedKpiContainer">
+                    <!-- KPI cards will be added dynamically by kpiCards.js -->
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="charts-grid">
+                <!-- Monthly Overview Chart -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3 class="chart-title">Aylık Genel Bakış</h3>
+                        <div class="chart-actions">
+                            <button class="chart-filter active" data-period="monthly">Aylık</button>
+                            <button class="chart-filter" data-period="weekly">Haftalık</button>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="monthlyChart"></canvas>
+                    </div>
+                </div>
+                
+                <!-- Category Distribution Chart -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3 class="chart-title">Kategori Dağılımı</h3>
+                        <div class="chart-actions">
+                            <button class="chart-filter active" data-type="expense">Gider</button>
+                            <button class="chart-filter" data-type="income">Gelir</button>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="categoryChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tag Analysis -->
+            <div class="mb-8">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3 class="chart-title">Etiket Analizi</h3>
+                        <div class="chart-actions">
+                            <select id="tagAnalysisType" class="p-1 border border-gray-300 rounded text-sm">
+                                <option value="expense">Gider</option>
+                                <option value="income">Gelir</option>
+                                <option value="all">Tümü</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="tagCloud" class="p-4 flex flex-wrap gap-2 justify-center">
+                        <!-- Tag cloud will be populated dynamically -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Budget Performance Section -->
+            <div class="mb-8">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3 class="chart-title">Bütçe Performansı</h3>
+                        <div class="chart-actions">
+                            <span id="budgetPeriodInfo" class="text-sm text-gray-600">Bu ayki bütçe</span>
+                        </div>
+                    </div>
+                    <div class="p-4">
+                        <!-- Budget Summary Cards -->
+                        <div class="grid grid-cols-4 gap-4 mb-4">
+                            <div class="bg-blue-50 p-3 rounded-lg">
+                                <p class="text-sm text-gray-600">Planlanan Gelir</p>
+                                <p id="plannedIncome" class="text-lg font-bold text-blue-700">₺0</p>
+                            </div>
+                            <div class="bg-red-50 p-3 rounded-lg">
+                                <p class="text-sm text-gray-600">Planlanan Gider</p>
+                                <p id="plannedExpense" class="text-lg font-bold text-red-700">₺0</p>
+                            </div>
+                            <div class="bg-green-50 p-3 rounded-lg">
+                                <p class="text-sm text-gray-600">Gelir Sapması</p>
+                                <p id="incomeVariance" class="text-lg font-bold text-green-700">₺0</p>
+                            </div>
+                            <div class="bg-purple-50 p-3 rounded-lg">
+                                <p class="text-sm text-gray-600">Gider Sapması</p>
+                                <p id="expenseVariance" class="text-lg font-bold text-purple-700">₺0</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Budget Performance Chart -->
+                        <div class="chart-container">
+                            <canvas id="budgetPerformanceChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Transactions -->
+            <div class="recent-transactions">
+                <div class="recent-transactions-header">
+                    <h3 class="recent-transactions-title">Son İşlemler</h3>
+                    <a id="viewAllTransactions" class="view-all-link">Tümünü Görüntüle</a>
+                </div>
+                <div id="recentTransactions" class="transaction-list">
+                    <!-- Dynamic content -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Categories Tab Content -->
+        <div id="categoriesContent" class="tab-content hidden">
+            <div class="categories-grid">
+                <!-- Income Categories -->
+                <div class="category-section income">
+                    <div class="category-section-header">
+                        <h3 class="category-section-title">Gelir Kategorileri</h3>
+                        <button id="addIncomeCategory" class="add-category-btn income">
+                            <i data-lucide="plus" style="width: 1rem; height: 1rem;"></i>
+                            <span>Ekle</span>
+                        </button>
+                    </div>
+                    <div id="incomeCategoriesList" class="category-list">
+                        <!-- Dynamic content -->
+                    </div>
+                </div>
+
+                <!-- Expense Categories -->
+                <div class="category-section expense">
+                    <div class="category-section-header">
+                        <h3 class="category-section-title">Gider Kategorileri</h3>
+                        <button id="addExpenseCategory" class="add-category-btn expense">
+                            <i data-lucide="plus" style="width: 1rem; height: 1rem;"></i>
+                            <span>Ekle</span>
+                        </button>
+                    </div>
+                    <div id="expenseCategoriesList" class="category-list">
+                        <!-- Dynamic content -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Accounts Section -->
+            <div class="accounts-section">
+                <div class="accounts-header">
+                    <h3 class="accounts-title">Hesaplar</h3>
+                    <button id="addAccount" class="add-account-btn">
+                        <i data-lucide="plus" style="width: 1rem; height: 1rem;"></i>
+                        <span>Hesap Ekle</span>
+                    </button>
+                </div>
+                <div id="accountsList" class="accounts-grid">
+                    <!-- Dynamic content -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Transactions Tab Content -->
+        <div id="transactionsContent" class="tab-content hidden">
+            <!-- Filters -->
+            <div class="filters-section">
+                <h3 class="filters-title">Filtreler</h3>
+                <div class="filters-grid">
+                    <div class="filter-group">
+                        <label class="filter-label">Tarih Aralığı</label>
+                        <select id="dateFilter" class="filter-control">
+                            <option value="all">Tümü</option>
+                            <option value="thisMonth">Bu Ay</option>
+                            <option value="lastMonth">Geçen Ay</option>
+                            <option value="thisYear">Bu Yıl</option>
+                            <option value="custom">Özel</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label">Tip</label>
+                        <select id="typeFilter" class="filter-control">
+                            <option value="all">Tümü</option>
+                            <option value="income">Gelir</option>
+                            <option value="expense">Gider</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label">Durum</label>
+                        <select id="statusFilter" class="filter-control">
+                            <option value="all">Tümü</option>
+                            <option value="actual">Gerçekleşen</option>
+                            <option value="planned">Planlanan</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label">Kategori</label>
+                        <select id="categoryFilter" class="filter-control">
+                            <option value="all">Tümü</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label">Hesap</label>
+                        <select id="accountFilter" class="filter-control">
+                            <option value="all">Tümü</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label">Etiket</label>
+                        <div class="flex">
+                            <select id="tagFilter" class="filter-control rounded-r-none">
+                                <option value="all">Tümü</option>
+                            </select>
+                            <button id="manageTags" class="btn bg-blue-500 hover:bg-blue-600 text-white rounded-l-none flex items-center justify-center" style="width: 40px;">
+                                <i data-lucide="tags" style="width: 1rem; height: 1rem;"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Transactions Table -->
+            <div class="table-section">
+                <div class="table-header">
+                    <h3 class="table-title">İşlemler</h3>
+                    <div class="table-actions">
+                        <button id="addTransaction" class="table-action-btn primary">
+                            <i data-lucide="plus" style="width: 1rem; height: 1rem;"></i>
+                            <span>İşlem Ekle</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="flex justify-between items-center mb-3 mt-2">
+                    <div class="transaction-bulk-actions">
+                        <button id="bulkEditBtn" class="btn btn-sm btn-outline-secondary mr-2 opacity-50" onclick="tableManager.editSelectedTransactions()" disabled>
+                            <i data-lucide="edit" style="width: 0.875rem; height: 0.875rem;"></i>
+                            <span>Düzenle</span>
+                        </button>
+                        <button id="bulkDeleteBtn" class="btn btn-sm btn-outline-danger mr-2 opacity-50" onclick="tableManager.deleteSelectedTransactions()" disabled>
+                            <i data-lucide="trash-2" style="width: 0.875rem; height: 0.875rem;"></i>
+                            <span>Sil</span>
+                        </button>
+                        <button id="bulkRealizeBtn" class="btn btn-sm btn-outline-success opacity-50" onclick="tableManager.realizeSelectedTransactions()" disabled>
+                            <i data-lucide="check-circle" style="width: 0.875rem; height: 0.875rem;"></i>
+                            <span>Gerçekleştir</span>
+                        </button>
+                    </div>
+                    <div class="text-sm text-gray-500">
+                        <span id="selectedRowsCount">0</span> işlem seçildi
+                    </div>
+                </div>
+                <div id="transactionsTable"></div>
+            </div>
+        </div>
+
+        <!-- Reports Tab Content -->
+        <div id="reportsContent" class="tab-content hidden">
+            <!-- Report Controls -->
+            <div class="filters-section">
+                <h3 class="filters-title">Rapor Ayarları</h3>
+                <div class="filters-grid" style="grid-template-columns: repeat(4, 1fr);">
+                    <div class="filter-group">
+                        <label class="filter-label">Dönem</label>
+                        <select id="reportPeriod" class="filter-control">
+                            <option value="monthly">Aylık</option>
+                            <option value="yearly">Yıllık</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label">Yıl</label>
+                        <select id="reportYear" class="filter-control">
+                            <!-- Dynamic years -->
+                        </select>
+                    </div>
+                    <div class="filter-group" id="monthSelectorGroup">
+                        <label class="filter-label">Ay</label>
+                        <select id="reportMonth" class="filter-control">
+                            <option value="1">Ocak</option>
+                            <option value="2">Şubat</option>
+                            <option value="3">Mart</option>
+                            <option value="4">Nisan</option>
+                            <option value="5">Mayıs</option>
+                            <option value="6">Haziran</option>
+                            <option value="7">Temmuz</option>
+                            <option value="8">Ağustos</option>
+                            <option value="9">Eylül</option>
+                            <option value="10">Ekim</option>
+                            <option value="11">Kasım</option>
+                            <option value="12">Aralık</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label" style="opacity: 0;">Action</label>
+                        <button id="generateReport" class="btn btn-primary" style="width: 100%;">
+                            <i data-lucide="refresh-cw" style="width: 1rem; height: 1rem;"></i>
+                            <span>Rapor Oluştur</span>
+                        </button>
+                    </div>
+                </div>
+                <!-- Export Buttons -->
+                <div id="reportActions" class="mt-4 flex justify-end">
+                    <!-- Butonlar reportManager.setupExportButtons() ile dinamik olarak eklenecek -->
+                </div>
+            </div>
+
+            <!-- Budget Planning Section -->
+            <div class="table-section">
+                <div class="table-header">
+                    <h3 class="table-title">Bütçe Planlama</h3>
+                    <div class="table-actions">
+                        <button id="importBudgetPlans" class="table-action-btn secondary mr-2">
+                            <i data-lucide="upload" style="width: 1rem; height: 1rem;"></i>
+                            <span>Excel'den İçe Aktar</span>
+                        </button>
+                        <button id="exportBudgetPlans" class="table-action-btn secondary mr-2">
+                            <i data-lucide="download" style="width: 1rem; height: 1rem;"></i>
+                            <span>Excel Şablonu İndir</span>
+                        </button>
+                        <button id="addBudgetPlan" class="table-action-btn primary">
+                            <i data-lucide="plus" style="width: 1rem; height: 1rem;"></i>
+                            <span>Bütçe Planı Ekle</span>
+                        </button>
+                    </div>
+                </div>
+                <div id="budgetPlanningTable" class="budget-planning-grid">
+                    <!-- Dynamic content -->
+                </div>
+            </div>
+
+            <!-- Budget vs Actual Analysis -->
+            <div class="charts-grid">
+                <!-- Budget Overview Chart -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3 class="chart-title">Bütçe Genel Bakış</h3>
+                        <div class="chart-actions">
+                            <span id="budgetPeriodLabel" class="text-sm text-gray-600"></span>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="budgetOverviewChart"></canvas>
+                    </div>
+                </div>
+                
+                <!-- Budget Status Chart -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3 class="chart-title">Bütçe Durumu</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="budgetStatusChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Budget Analysis Table -->
+            <div class="table-section">
+                <div class="table-header">
+                    <h3 class="table-title">Bütçe Analizi</h3>
+                    <div class="table-actions">
+                        <button id="exportBudgetReport" class="table-action-btn secondary">
+                            <i data-lucide="download" style="width: 1rem; height: 1rem;"></i>
+                            <span>Rapor İndir</span>
+                        </button>
+                    </div>
+                </div>
+                <div id="budgetAnalysisTable"></div>
+            </div>
+            
+            <!-- Tag and Category Analysis Section -->
+            <div class="table-section mt-6">
+                <div class="table-header">
+                    <h3 class="table-title">Etiket ve Kategori Analizi</h3>
+                    <div class="table-actions">
+                        <button id="exportTagCategoryReport" class="table-action-btn secondary">
+                            <i data-lucide="download" style="width: 1rem; height: 1rem;"></i>
+                            <span>Rapor İndir</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-6 mt-4">
+                    <!-- Tag Analysis Chart -->
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3 class="chart-title">Etiket Analizi</h3>
+                            <div class="chart-actions">
+                                <select id="tagReportType" class="p-1 border border-gray-300 rounded text-sm">
+                                    <option value="expense">Gider</option>
+                                    <option value="income">Gelir</option>
+                                    <option value="all">Tümü</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="chart-container" style="height: 300px;">
+                            <canvas id="tagAnalysisChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <!-- Category Distribution Chart -->
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3 class="chart-title">Kategori Dağılımı</h3>
+                            <div class="chart-actions">
+                                <select id="categoryReportType" class="p-1 border border-gray-300 rounded text-sm">
+                                    <option value="expense">Gider</option>
+                                    <option value="income">Gelir</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="chart-container" style="height: 300px;">
+                            <canvas id="categoryAnalysisChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Top Tags and Categories Table -->
+                <div class="grid grid-cols-2 gap-6 mt-4">
+                    <div id="topTagsTable" class="bg-white p-4 rounded-lg shadow border border-gray-100">
+                        <h4 class="text-lg font-medium mb-3">En Çok Kullanılan Etiketler</h4>
+                        <div class="overflow-x-auto">
+                            <!-- Table will be populated dynamically -->
+                        </div>
+                    </div>
+                    
+                    <div id="topCategoriesTable" class="bg-white p-4 rounded-lg shadow border border-gray-100">
+                        <h4 class="text-lg font-medium mb-3">En Çok Kullanılan Kategoriler</h4>
+                        <div class="overflow-x-auto">
+                            <!-- Table will be populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Floating Action Button -->
+    <button id="fab" class="fab">
+        <i data-lucide="plus" style="width: 1.5rem; height: 1.5rem;"></i>
+    </button>
+
+    <!-- Modals will be added dynamically -->
+    <div id="modalContainer"></div>
+
+    <!-- JavaScript Files -->
+    <script src="js/utils.js"></script>
+    <script src="js/dataManager.js"></script>
+    <script src="js/chartManager.js"></script>
+    <script src="js/categoryManager.js"></script>
+    <script src="js/tableManager.js"></script>
+    <script src="js/exportImport.js"></script>
+    <script src="js/accountManager.js"></script>
+    <script src="js/reportManager.js"></script>
+    <!-- Component Files -->
+    <script src="js/components/kpiCards.js"></script>
+    <script src="js/components/interactiveCharts.js"></script>
+    <script src="js/components/quickActions.js"></script>
+    <script src="js/components/aiRecommendations.js"></script>
+    <script src="js/components/dragDropWidgets.js"></script>
+    <script src="js/components/executiveSummaryDashboard.js"></script>
+    <script src="js/components/operationalDashboard.js"></script>
+    <script src="js/components/advancedAnalyticsDashboard.js"></script>
+    <script src="js/app.js"></script>
+
+    <script>
+        // Initialize Lucide icons after page load
+        document.addEventListener('DOMContentLoaded', function() {
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+        });
+    </script>
+</body>
+</html>
